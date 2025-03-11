@@ -1,0 +1,130 @@
+.project-view-container {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 24px;
+  margin-top: 20px;
+}
+
+.project-header {
+  margin-bottom: 24px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 16px;
+}
+
+.project-header h1 {
+  font-size: 28px;
+  color: #333;
+  margin-bottom: 16px;
+}
+
+.project-meta {
+  color: #666;
+  font-size: 14px;
+}
+
+.project-meta p {
+  margin-bottom: 8px;
+}
+
+.project-actions {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.view-docs-button {
+  background-color: #4a6cf7;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.view-docs-button:hover {
+  background-color: #3a5ce5;
+}
+
+.generate-button {
+  background-color: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.generate-button:hover {
+  background-color: #f57c00;
+}
+
+.generation-info {
+  background-color: #e8f5e9;
+  border-radius: 4px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.generation-info p {
+  margin-bottom: 12px;
+  color: #2e7d32;
+}
+
+.progress-indicator {
+  height: 4px;
+  background-color: #e0e0e0;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-indicator::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 30%;
+  background-color: #4caf50;
+  animation: progress 1.5s infinite ease-in-out;
+}
+
+@keyframes progress {
+  0% {
+    left: -30%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.back-link {
+  margin-top: 24px;
+}
+
+.back-link button {
+  background-color: transparent;
+  color: #666;
+  border: 1px solid #ddd;
+  padding: 8px 16px;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.back-link button:hover {
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+@media (max-width: 600px) {
+  .project-actions {
+    flex-direction: column;
+  }
+} 
