@@ -19,7 +19,14 @@ app.get('/health', (req, res) => {
 });
 
 app.use((err, req, res, next) => {
+  console.error('Ошибка в приложении:');
   console.error(err.stack);
+  console.error('Детали запроса:', {
+    method: req.method,
+    url: req.url,
+    body: req.body,
+    headers: req.headers
+  });
   res.status(500).json({ 
     error: 'Something went wrong!',
     message: process.env.NODE_ENV === 'development' ? err.message : undefined

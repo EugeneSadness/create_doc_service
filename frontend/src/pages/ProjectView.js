@@ -14,7 +14,7 @@ const ProjectView = () => {
   
   useEffect(() => {
     fetchProject();
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   
   const fetchProject = async () => {
     try {

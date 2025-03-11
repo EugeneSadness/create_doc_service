@@ -5,19 +5,31 @@ const simpleGit = require('simple-git');
 
 async function analyzeRepository(repoUrl) {
   try {
+    console.log(`Начинаю анализ репозитория: ${repoUrl}`);
     const tempDir = path.join(os.tmpdir(), `repo-${Date.now()}`);
     await fs.mkdir(tempDir, { recursive: true });
+    console.log(`Создана временная директория: ${tempDir}`);
 
+    console.log(`Клонирую репозиторий...`);
     const git = simpleGit();
     await git.clone(repoUrl, tempDir);
+    console.log(`Репозиторий успешно клонирован`);
 
+    console.log(`Анализирую структуру проекта...`);
     const structure = await analyzeProjectStructure(tempDir);
+    console.log(`Структура проекта проанализирована`);
 
+    console.log(`Анализирую информацию о проекте...`);
     const projectInfo = await analyzeProjectInfo(tempDir);
+    console.log(`Информация о проекте проанализирована`);
 
+    console.log(`Анализирую README...`);
     const readme = await analyzeReadme(tempDir);
+    console.log(`README проанализирован`);
 
+    console.log(`Анализирую код...`);
     const codeAnalysis = await analyzeCode(tempDir);
+    console.log(`Код проанализирован`);
 
     const documentation = {
       projectInfo,
@@ -27,8 +39,11 @@ async function analyzeRepository(repoUrl) {
       components: codeAnalysis.components
     };
 
+    console.log(`Очищаю временную директорию...`);
     await fs.rm(tempDir, { recursive: true, force: true });
+    console.log(`Временная директория очищена`);
     
+    console.log(`Анализ репозитория завершен успешно`);
     return documentation;
   } catch (error) {
     console.error('Error analyzing repository:', error);
