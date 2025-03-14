@@ -496,5 +496,6 @@ async function generateProjectOverview(projectPath, projectInfo, structure, code
 }
 
 module.exports = {
-  analyzeRepository
+  analyzeRepository,
+  generateProjectOverview
 }; 

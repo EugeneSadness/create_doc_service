@@ -10,7 +10,9 @@ CREATE TABLE projects (
     user_id INTEGER REFERENCES users(id),
     repository_url TEXT NOT NULL,
     name VARCHAR(255),
+    description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_analyzed_at TIMESTAMP
 );
 
