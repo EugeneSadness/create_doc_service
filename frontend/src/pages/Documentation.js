@@ -96,6 +96,19 @@ const Documentation = () => {
                     <h3>{item.name}</h3>
                     <p className="api-description">{item.description}</p>
                     <p className="api-file">File: {item.file}</p>
+                    {item.params && item.params.length > 0 && (
+                      <div className="api-params">
+                        <h4>Parameters:</h4>
+                        <ul>
+                          {item.params.map((param, paramIndex) => (
+                            <li key={paramIndex}>{param}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {item.line && (
+                      <p className="api-line">Line: {item.line}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -114,12 +127,63 @@ const Documentation = () => {
                 {content.components.map((component, index) => (
                   <div key={index} className="component-item">
                     <h3>{component.name}</h3>
+                    {component.description && component.description !== 'No description' && (
+                      <p className="component-description">{component.description}</p>
+                    )}
                     <p className="component-file">File: {component.file}</p>
+                    {component.props && component.props.length > 0 && (
+                      <div className="component-props">
+                        <h4>Props:</h4>
+                        <ul>
+                          {component.props.map((prop, propIndex) => (
+                            <li key={propIndex}>
+                              {prop.name} {prop.required && <span className="required">*required</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {component.line && (
+                      <p className="component-line">Line: {component.line}</p>
+                    )}
                   </div>
                 ))}
               </div>
             ) : (
               <p>No components documentation available</p>
+            )}
+          </div>
+        );
+        
+      case 'classes':
+        return (
+          <div className="classes-content">
+            <h2>Classes</h2>
+            {content.classes && content.classes.length > 0 ? (
+              <div className="class-list">
+                {content.classes.map((cls, index) => (
+                  <div key={index} className="class-item">
+                    <h3>{cls.name}</h3>
+                    <p className="class-description">{cls.description}</p>
+                    <p className="class-file">File: {cls.file}</p>
+                    
+                    {cls.methods && cls.methods.length > 0 && (
+                      <div className="class-methods">
+                        <h4>Methods:</h4>
+                        {cls.methods.map((method, methodIndex) => (
+                          <div key={methodIndex} className="method-item">
+                            <h5>{method.name}({method.params.join(', ')})</h5>
+                            <p className="method-description">{method.description}</p>
+                            <p className="method-line">Line: {method.line}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p>No classes documentation available</p>
             )}
           </div>
         );
@@ -223,6 +287,12 @@ const Documentation = () => {
           onClick={() => setActiveTab('components')}
         >
           Components
+        </button>
+        <button 
+          className={`tab-button ${activeTab === 'classes' ? 'active' : ''}`}
+          onClick={() => setActiveTab('classes')}
+        >
+          Classes
         </button>
         <button 
           className={`tab-button ${activeTab === 'dependencies' ? 'active' : ''}`}

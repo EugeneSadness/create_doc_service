@@ -2,6 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
 const simpleGit = require('simple-git');
+const { analyzeJavaScriptFile } = require('./jsAnalyzer');
 
 async function analyzeRepository(repoUrl) {
   try {
@@ -10,9 +11,12 @@ async function analyzeRepository(repoUrl) {
     await fs.mkdir(tempDir, { recursive: true });
     console.log(`Создана временная директория: ${tempDir}`);
 
-    console.log(`Клонирую репозиторий...`);
+    // Преобразуем URL в публичный URL для клонирования
+    const publicRepoUrl = repoUrl.replace('https://github.com/', 'https://github.com/').replace(/\.git$/, '') + '.git';
+    console.log(`Клонирую репозиторий из: ${publicRepoUrl}`);
+    
     const git = simpleGit();
-    await git.clone(repoUrl, tempDir);
+    await git.clone(publicRepoUrl, tempDir, ['--depth', '1']);
     console.log(`Репозиторий успешно клонирован`);
 
     console.log(`Анализирую структуру проекта...`);
@@ -31,12 +35,18 @@ async function analyzeRepository(repoUrl) {
     const codeAnalysis = await analyzeCode(tempDir);
     console.log(`Код проанализирован`);
 
+    console.log(`Генерирую общее описание проекта...`);
+    const projectOverview = await generateProjectOverview(tempDir, projectInfo, structure, codeAnalysis);
+    console.log(`Общее описание проекта сгенерировано`);
+
     const documentation = {
       projectInfo,
       structure,
       readme,
+      overview: projectOverview,
       api: codeAnalysis.api,
-      components: codeAnalysis.components
+      components: codeAnalysis.components,
+      classes: codeAnalysis.classes
     };
 
     console.log(`Очищаю временную директорию...`);
@@ -158,53 +168,66 @@ async function analyzeReadme(projectPath) {
 async function analyzeCode(projectPath) {
   const result = {
     api: [],
-    components: []
+    components: [],
+    classes: []
   };
   
-
   try {
+    // Анализ JavaScript/TypeScript файлов с использованием AST
     const jsFiles = await findFiles(projectPath, ['.js', '.jsx', '.ts', '.tsx']);
+    console.log(`Найдено ${jsFiles.length} JavaScript/TypeScript файлов`);
     
     for (const file of jsFiles) {
-      const content = await fs.readFile(file, 'utf8');
+      console.log(`Анализирую файл: ${file}`);
+      const relativePath = path.relative(projectPath, file);
       
-      const functionMatches = content.match(/\/\*\*[\s\S]*?\*\/\s*(?:function|const|let|var)\s+(\w+)/g) || [];
-      
-      for (const match of functionMatches) {
-        const nameMatch = match.match(/(?:function|const|let|var)\s+(\w+)/);
-        if (nameMatch && nameMatch[1]) {
-          const name = nameMatch[1];
-          const description = match.match(/\/\*\*([\s\S]*?)\*\//)[1]
-            .replace(/\*/g, '')
-            .trim();
-          
-          result.api.push({
-            name,
-            description,
-            file: path.relative(projectPath, file)
-          });
-        }
-      }
-      
-      if (file.endsWith('.jsx') || file.endsWith('.tsx') || content.includes('React')) {
-        const componentMatches = content.match(/(?:function|const)\s+(\w+)\s*(?:=\s*\([^)]*\)\s*=>|=\s*React\.memo|=\s*React\.forwardRef|=\s*\(|\([^)]*\)\s*{)/g) || [];
+      try {
+        const analysis = await analyzeJavaScriptFile(file);
         
-        for (const match of componentMatches) {
-          const nameMatch = match.match(/(?:function|const)\s+(\w+)/);
-          if (nameMatch && nameMatch[1] && /^[A-Z]/.test(nameMatch[1])) {
-            result.components.push({
-              name: nameMatch[1],
-              file: path.relative(projectPath, file)
-            });
-          }
-        }
+        // Добавляем функции в API
+        analysis.functions.forEach(func => {
+          result.api.push({
+            name: func.name,
+            description: func.description,
+            params: func.params,
+            file: relativePath,
+            line: func.line
+          });
+        });
+        
+        // Добавляем компоненты
+        analysis.components.forEach(component => {
+          result.components.push({
+            name: component.name,
+            description: component.description,
+            props: component.props,
+            file: relativePath,
+            line: component.line
+          });
+        });
+        
+        // Добавляем классы
+        analysis.classes.forEach(cls => {
+          result.classes.push({
+            name: cls.name,
+            description: cls.description,
+            methods: cls.methods,
+            file: relativePath,
+            line: cls.line
+          });
+        });
+      } catch (error) {
+        console.error(`Ошибка при анализе файла ${file}:`, error);
       }
     }
     
+    // Анализ Python файлов (оставляем существующую логику)
     const pyFiles = await findFiles(projectPath, ['.py']);
+    console.log(`Найдено ${pyFiles.length} Python файлов`);
     
     for (const file of pyFiles) {
       const content = await fs.readFile(file, 'utf8');
+      const relativePath = path.relative(projectPath, file);
       
       const functionMatches = content.match(/def\s+(\w+)\s*\([^)]*\)\s*:(?:\s*"""[\s\S]*?""")?/g) || [];
       
@@ -218,7 +241,7 @@ async function analyzeCode(projectPath) {
           result.api.push({
             name,
             description,
-            file: path.relative(projectPath, file)
+            file: relativePath
           });
         }
       }
@@ -263,6 +286,213 @@ async function findFiles(dir, extensions) {
   
   await scan(dir);
   return result;
+}
+
+async function generateProjectOverview(projectPath, projectInfo, structure, codeAnalysis) {
+  try {
+    const overview = {
+      title: projectInfo.name || 'Unnamed Project',
+      description: projectInfo.description || '',
+      projectType: 'Unknown',
+      mainFeatures: [],
+      technologies: [],
+      architecture: '',
+      entryPoints: []
+    };
+
+    // Определяем тип проекта
+    if (projectInfo.type === 'javascript') {
+      // Проверяем наличие файлов, характерных для разных типов JS-проектов
+      const hasReactFiles = structure.files.some(file => 
+        file.endsWith('.jsx') || file.endsWith('.tsx') || 
+        file.includes('react') || file.includes('React')
+      );
+      
+      const hasNodeFiles = structure.files.some(file => 
+        file.includes('server.js') || file.includes('app.js') || 
+        file.includes('index.js') || file.includes('express') || 
+        file.includes('koa') || file.includes('fastify')
+      );
+      
+      const hasVueFiles = structure.files.some(file => 
+        file.endsWith('.vue') || file.includes('vue')
+      );
+      
+      const hasAngularFiles = structure.files.some(file => 
+        file.includes('angular') || file.includes('ng-')
+      );
+
+      if (hasReactFiles && hasNodeFiles) {
+        overview.projectType = 'Full-stack JavaScript Application (React + Node.js)';
+        overview.architecture = 'Client-server architecture with React frontend and Node.js backend';
+      } else if (hasReactFiles) {
+        overview.projectType = 'React Frontend Application';
+        overview.architecture = 'Component-based frontend application using React';
+      } else if (hasVueFiles) {
+        overview.projectType = 'Vue.js Frontend Application';
+        overview.architecture = 'Component-based frontend application using Vue.js';
+      } else if (hasAngularFiles) {
+        overview.projectType = 'Angular Frontend Application';
+        overview.architecture = 'Component-based frontend application using Angular';
+      } else if (hasNodeFiles) {
+        overview.projectType = 'Node.js Backend Application';
+        overview.architecture = 'Server-side application using Node.js';
+      } else {
+        overview.projectType = 'JavaScript Application';
+      }
+
+      // Определяем основные технологии
+      if (projectInfo.dependencies) {
+        const dependencies = projectInfo.dependencies.map(dep => dep.name);
+        
+        if (dependencies.includes('react')) overview.technologies.push('React');
+        if (dependencies.includes('react-dom')) overview.technologies.push('React DOM');
+        if (dependencies.includes('react-router') || dependencies.includes('react-router-dom')) 
+          overview.technologies.push('React Router');
+        if (dependencies.includes('redux')) overview.technologies.push('Redux');
+        if (dependencies.includes('vue')) overview.technologies.push('Vue.js');
+        if (dependencies.includes('angular')) overview.technologies.push('Angular');
+        if (dependencies.includes('express')) overview.technologies.push('Express.js');
+        if (dependencies.includes('koa')) overview.technologies.push('Koa.js');
+        if (dependencies.includes('fastify')) overview.technologies.push('Fastify');
+        if (dependencies.includes('mongoose') || dependencies.includes('mongodb')) 
+          overview.technologies.push('MongoDB');
+        if (dependencies.includes('sequelize') || dependencies.includes('pg')) 
+          overview.technologies.push('PostgreSQL');
+        if (dependencies.includes('mysql')) overview.technologies.push('MySQL');
+        if (dependencies.includes('axios') || dependencies.includes('fetch')) 
+          overview.technologies.push('HTTP Client');
+        if (dependencies.includes('webpack')) overview.technologies.push('Webpack');
+        if (dependencies.includes('babel')) overview.technologies.push('Babel');
+        if (dependencies.includes('typescript')) overview.technologies.push('TypeScript');
+        if (dependencies.includes('jest') || dependencies.includes('mocha') || dependencies.includes('chai')) 
+          overview.technologies.push('Testing Framework');
+      }
+    } else if (projectInfo.type === 'python') {
+      // Проверяем наличие файлов, характерных для разных типов Python-проектов
+      const hasDjangoFiles = structure.files.some(file => 
+        file.includes('django') || file.includes('settings.py') || 
+        file.includes('urls.py') || file.includes('wsgi.py')
+      );
+      
+      const hasFlaskFiles = structure.files.some(file => 
+        file.includes('flask') || file.includes('app.py') || 
+        file.includes('routes.py')
+      );
+      
+      const hasFastAPIFiles = structure.files.some(file => 
+        file.includes('fastapi') || file.includes('main.py')
+      );
+
+      if (hasDjangoFiles) {
+        overview.projectType = 'Django Web Application';
+        overview.architecture = 'MVT (Model-View-Template) web application using Django';
+      } else if (hasFlaskFiles) {
+        overview.projectType = 'Flask Web Application';
+        overview.architecture = 'Microframework-based web application using Flask';
+      } else if (hasFastAPIFiles) {
+        overview.projectType = 'FastAPI Web Application';
+        overview.architecture = 'Modern API-focused web application using FastAPI';
+      } else {
+        overview.projectType = 'Python Application';
+      }
+
+      // Определяем основные технологии из requirements.txt
+      if (projectInfo.dependencies) {
+        const dependencies = projectInfo.dependencies.map(dep => dep.name);
+        
+        if (dependencies.includes('django')) overview.technologies.push('Django');
+        if (dependencies.includes('flask')) overview.technologies.push('Flask');
+        if (dependencies.includes('fastapi')) overview.technologies.push('FastAPI');
+        if (dependencies.includes('sqlalchemy')) overview.technologies.push('SQLAlchemy');
+        if (dependencies.includes('psycopg2') || dependencies.includes('psycopg2-binary')) 
+          overview.technologies.push('PostgreSQL');
+        if (dependencies.includes('pymysql') || dependencies.includes('mysqlclient')) 
+          overview.technologies.push('MySQL');
+        if (dependencies.includes('pymongo')) overview.technologies.push('MongoDB');
+        if (dependencies.includes('requests')) overview.technologies.push('HTTP Client');
+        if (dependencies.includes('pytest') || dependencies.includes('unittest')) 
+          overview.technologies.push('Testing Framework');
+        if (dependencies.includes('pandas')) overview.technologies.push('Data Analysis');
+        if (dependencies.includes('numpy')) overview.technologies.push('Numerical Computing');
+        if (dependencies.includes('tensorflow') || dependencies.includes('pytorch')) 
+          overview.technologies.push('Machine Learning');
+      }
+    }
+
+    // Определяем точки входа в приложение
+    const entryFiles = ['index.js', 'app.js', 'server.js', 'main.py', 'app.py', 'manage.py'];
+    for (const file of structure.files) {
+      const fileName = path.basename(file);
+      if (entryFiles.includes(fileName)) {
+        overview.entryPoints.push(file);
+      }
+    }
+
+    // Определяем основные функции на основе компонентов и классов
+    if (codeAnalysis.components && codeAnalysis.components.length > 0) {
+      overview.mainFeatures.push('Component-based UI');
+      
+      // Анализируем названия компонентов для определения функциональности
+      const componentNames = codeAnalysis.components.map(comp => comp.name.toLowerCase());
+      
+      if (componentNames.some(name => name.includes('auth') || name.includes('login') || name.includes('register')))
+        overview.mainFeatures.push('Authentication');
+      
+      if (componentNames.some(name => name.includes('form')))
+        overview.mainFeatures.push('Form Handling');
+      
+      if (componentNames.some(name => name.includes('list') || name.includes('table') || name.includes('grid')))
+        overview.mainFeatures.push('Data Display');
+      
+      if (componentNames.some(name => name.includes('nav') || name.includes('menu') || name.includes('sidebar')))
+        overview.mainFeatures.push('Navigation');
+      
+      if (componentNames.some(name => name.includes('modal') || name.includes('dialog')))
+        overview.mainFeatures.push('Modal Dialogs');
+      
+      if (componentNames.some(name => name.includes('chart') || name.includes('graph')))
+        overview.mainFeatures.push('Data Visualization');
+    }
+
+    if (codeAnalysis.api && codeAnalysis.api.length > 0) {
+      // Анализируем названия API функций для определения функциональности
+      const apiNames = codeAnalysis.api.map(api => api.name.toLowerCase());
+      
+      if (apiNames.some(name => name.includes('get') || name.includes('fetch') || name.includes('load')))
+        overview.mainFeatures.push('Data Fetching');
+      
+      if (apiNames.some(name => name.includes('post') || name.includes('create') || name.includes('add')))
+        overview.mainFeatures.push('Data Creation');
+      
+      if (apiNames.some(name => name.includes('update') || name.includes('edit') || name.includes('modify')))
+        overview.mainFeatures.push('Data Updating');
+      
+      if (apiNames.some(name => name.includes('delete') || name.includes('remove')))
+        overview.mainFeatures.push('Data Deletion');
+      
+      if (apiNames.some(name => name.includes('auth') || name.includes('login') || name.includes('register')))
+        overview.mainFeatures.push('Authentication');
+    }
+
+    // Удаляем дубликаты в массивах
+    overview.technologies = [...new Set(overview.technologies)];
+    overview.mainFeatures = [...new Set(overview.mainFeatures)];
+    overview.entryPoints = [...new Set(overview.entryPoints)];
+
+    return overview;
+  } catch (error) {
+    console.error('Error generating project overview:', error);
+    return {
+      title: projectInfo.name || 'Unnamed Project',
+      description: projectInfo.description || '',
+      projectType: 'Unknown',
+      mainFeatures: [],
+      technologies: [],
+      architecture: '',
+      entryPoints: []
+    };
+  }
 }
 
 module.exports = {
